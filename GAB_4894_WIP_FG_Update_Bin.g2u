@@ -1,0 +1,286 @@
+Program.Sub.ScreenSU.Start
+Gui.frmMain..Create
+Gui.frmMain..Caption("Update Bin")
+Gui.frmMain..Size(6990,5355)
+Gui.frmMain..MinX(0)
+Gui.frmMain..MinY(0)
+Gui.frmMain..Position(0,0)
+Gui.frmMain..BackColor(-2147483633)
+Gui.frmMain..MousePointer(0)
+Gui.frmMain..Event(UnLoad,frmMain_UnLoad)
+Gui.frmMain..MaxButton(False)
+Gui.frmMain..MinButton(False)
+Gui.frmMain..Sizeable(False)
+Gui.frmMain.cmdSave.Create(Button)
+Gui.frmMain.cmdSave.Size(855,375)
+Gui.frmMain.cmdSave.Position(120,4245)
+Gui.frmMain.cmdSave.Caption("Save")
+Gui.frmMain.cmdSave.Event(Click,cmdSave_Click)
+Gui.frmMain.ggcJobs.Create(GsGridControl)
+Gui.frmMain.ggcJobs.Size(6570,4020)
+Gui.frmMain.ggcJobs.Position(75,90)
+Program.Sub.ScreenSU.End
+
+Program.Sub.Preflight.Start
+	v.Global.sPart.Declare
+	v.Global.sLoc.Declare
+	v.Global.sWO.Declare
+	v.Global.sSuffix.Declare
+	v.Global.sSeq.Declare
+	F.Data.DataTable.Create("JOBS",True)
+	F.Data.DataTable.AddColumn("JOBS","JOB","STRING","",6)
+	F.Data.DataTable.AddColumn("JOBS","SUFFIX","STRING","",3)
+	F.Data.DataTable.AddColumn("JOBS","SEQ","STRING","",6)
+	F.Data.DataTable.AddColumn("JOBS","BIN","STRING","",6)
+	f.Data.DataTable.AddColumn("JOBS","PART","STRING")
+	F.Data.DataTable.AddColumn("JOBS","LOC","STRING")
+	F.Data.DataTable.AddColumn("JOBS","HIDE","STRING")
+	
+Program.Sub.Preflight.End
+
+'Modified to use the BDF instead of the passed variables.  This way it supports multiple work orders.
+'11/21/2018  DLF
+Program.Sub.Main.Start
+	F.Intrinsic.Control.Try
+	V.Local.sError.Declare
+	
+	v.Local.sIcon.Declare
+	v.Local.iRows.Declare
+	v.Local.iCount.Declare
+	v.Local.sRow.Declare
+	V.Local.sJob.Declare
+	v.Local.bSplit.Declare
+
+	
+	f.Intrinsic.BDF.Load("AUX001","AUX001")
+	F.Intrinsic.BDF.ReadRowCount("AUX001",V.Local.iRows)
+	F.Intrinsic.Math.Sub(V.Local.iRows,1,V.Local.iRows)
+	
+	f.Intrinsic.Control.For(v.Local.iCount,0,v.Local.iRows,1)
+		f.Intrinsic.BDF.ReadRow("AUX001",v.Local.iCount,v.Local.sRow)
+		f.Intrinsic.String.Split(v.Local.sRow,"|~|",v.Local.sRow)
+		F.Intrinsic.String.IsInString(V.Local.sRow,"-",False,v.Local.bSplit)
+		f.Intrinsic.Control.If(v.Local.bSplit)
+			f.Intrinsic.String.Split(v.Local.sRow(0),"-",v.Local.sJob)
+			f.Data.DataTable.AddRow("JOBS","JOB",V.Local.sJob(0),"SUFFIX",V.Local.sJob(1),"SEQ",V.Local.sRow(1))
+		F.Intrinsic.Control.Else
+			F.Data.DataTable.AddRow("JOBS","JOB",V.Local.sRow(0),"SEQ",V.Local.sRow(1))
+		f.Intrinsic.Control.EndIf
+	f.Intrinsic.Control.Next(v.Local.iCount)
+	
+	F.Data.DataView.Create("JOBS","vJOBS",22)
+	GUI.frmMain.ggcJobs.DataSource("JOBS")
+	GUI.frmMain.ggcJobs.AddGridviewFromDataview("gvJOBS","JOBS","vJOBS")
+	f.Intrinsic.Control.CallSub(formatting)
+	
+	F.Intrinsic.String.Build("{0}\gss2.ico",v.Caller.GasDir,v.Local.sIcon)
+	Gui.frmMain..Icon(v.Local.sIcon)
+
+	F.ODBC.Connection!conA.OpenCompanyConnection
+	
+	F.Intrinsic.Control.For(V.Local.iCount,0,V.DataTable.JOBS.RowCount--,1)
+		V.Global.sWO.Set(V.DataTable.JOBS(V.Local.iCount).JOB!FIELDVALSTRING)
+		V.Global.sSuffix.Set(v.DataTable.JOBS(v.Local.iCount).SUFFIX!FIELDVALTRIM)
+		V.Global.sSeq.Set(V.DataTable.JOBS(V.Local.iCount).SEQ!FIELDVALSTRING)
+		F.Intrinsic.Control.CallSub(CheckSequence,"ROW",V.Local.iCount)
+		F.Intrinsic.Control.CallSub(LoadBin,"ROW",V.Local.iCount)
+	F.Intrinsic.Control.Next(V.Local.iCount)
+
+
+	Gui.frmMain..Show
+	
+	F.Intrinsic.Control.Catch
+		F.Intrinsic.String.Build("Project: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}{1}{1}GAB Version: {5}",V.Ambient.ScriptPath,V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,V.Local.sError)
+		F.Intrinsic.UI.Msgbox(V.Local.sError)
+		F.Intrinsic.Control.End 
+	F.Intrinsic.Control.EndTry
+	
+Program.Sub.Main.End
+
+Program.Sub.frmMain_UnLoad.Start
+	F.Intrinsic.Control.Try
+	V.Local.sError.Declare
+	
+	F.ODBC.Connection!conA.Close
+	F.Intrinsic.Control.End
+	
+	F.Intrinsic.Control.Catch
+		F.Intrinsic.String.Build("Project: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}{1}{1}GAB Version: {5}",V.Ambient.ScriptPath,V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,V.Local.sError)
+		F.Intrinsic.UI.Msgbox(V.Local.sError)
+		F.Intrinsic.Control.End 
+	F.Intrinsic.Control.EndTry
+
+Program.Sub.frmMain_UnLoad.End
+
+Program.Sub.cmdSave_Click.Start
+	F.Intrinsic.Control.Try
+	V.Local.sError.Declare
+	
+	v.Local.sBin.Declare
+	v.Local.sSQL.Declare
+	V.Local.iCount.Declare
+	
+	GUI.frmMain..Visible(False)
+	
+	F.Data.DataView.SetFilter("JOBS","vJOBS","BIN > ''")
+	
+	F.Intrinsic.Control.For(V.Local.iCount,0,V.DataView.JOBS!vJOBS.RowCount--,1)
+	
+		F.Intrinsic.String.Build("UPDATE INVENTORY_MSTR SET BIN = '{0}' WHERE PART = '{1}' AND LOCATION = '{2}';",V.DataView.JOBS!vJOBS(V.Local.iCount).BIN!FIELDVALTRIM,V.DataView.JOBS!vJOBS(V.Local.iCount).PART!FIELDVALTRIM,V.DataView.JOBS!vJOBS(V.Local.iCount).LOC!FIELDVALTRIM,v.Local.sSQL)
+		F.ODBC.Connection!conA.Execute(v.Local.sSQL)
+	
+	F.Intrinsic.Control.Next(V.Local.iCount)
+	
+	F.Intrinsic.Control.CallSub(frmMain_Unload)
+
+	
+	F.Intrinsic.Control.Catch
+		F.Intrinsic.String.Build("Project: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}{1}{1}GAB Version: {5}",V.Ambient.ScriptPath,V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,V.Local.sError)
+		F.Intrinsic.UI.Msgbox(V.Local.sError)
+		F.Intrinsic.Control.End 
+	F.Intrinsic.Control.EndTry
+
+Program.Sub.cmdSave_Click.End
+
+Program.Sub.cmdBrowser_Click.Start
+	F.Intrinsic.Control.Try
+	V.Local.sError.Declare
+	
+	v.Local.sBin.Declare
+	
+	F.Intrinsic.UI.Browser(150,"conA",v.Local.sBin)
+	F.Intrinsic.String.Split(v.Local.sBin,"*!*",v.Local.sBin)
+	F.Intrinsic.String.RTrim(v.Local.sBin,v.Local.sBin)
+	
+	Gui.frmMain.txtBin.Text(v.Local.sBin)
+	
+	F.Intrinsic.Control.Catch
+		F.Intrinsic.String.Build("Project: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}{1}{1}GAB Version: {5}",V.Ambient.ScriptPath,V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,V.Local.sError)
+		F.Intrinsic.UI.Msgbox(V.Local.sError)
+		F.Intrinsic.Control.End 
+	F.Intrinsic.Control.EndTry
+
+Program.Sub.cmdBrowser_Click.End
+
+Program.Sub.LoadBin.Start
+	F.Intrinsic.Control.Try
+	V.Local.sError.Declare
+	
+	v.Local.sSQL.Declare
+	v.Local.sBin.Declare
+	v.Local.iCnt.Declare
+	v.Local.sTemp.Declare
+	
+	F.Intrinsic.String.Build("SELECT PART, LOCATION FROM JOB_HEADER WHERE JOB = '{0}' AND SUFFIX = '{1}';",v.Global.sWO,v.Global.sSuffix,v.Local.sSQL)
+	F.ODBC.Connection!conA.ExecuteAndReturn(v.Local.sSQL,v.Local.sTemp)
+	
+	F.Intrinsic.String.Split(v.Local.sTemp,"*!*",v.Local.sTemp)
+	v.Global.sPart.Set(v.Local.sTemp(0))
+	v.Global.sLoc.Set(v.Local.sTemp(1))
+	F.Data.DataTable.SetValue("JOBS",V.Args.ROW,"PART",V.Global.sPart,"LOC",V.Global.sLoc)
+	F.Intrinsic.String.Build("SELECT BIN FROM V_INVENTORY_MSTR WHERE PART = '{0}' AND LOCATION = '{1}';",v.Global.sPart,v.Global.sLoc,v.Local.sSQL)
+	F.ODBC.Connection!conA.ExecuteAndReturn(v.Local.sSQL,v.Local.sBin)
+	
+'	F.Intrinsic.Control.If(v.Local.sBin,<>,"")	
+'		F.Data.DataTable.SetValue("JOBS",V.Args.ROW,"BIN",v.Local.sBin)
+'	F.Intrinsic.Control.EndIf
+	
+	F.Intrinsic.Control.Catch
+		F.Intrinsic.String.Build("Project: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}{1}{1}GAB Version: {5}",V.Ambient.ScriptPath,V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,V.Local.sError)
+		F.Intrinsic.UI.Msgbox(V.Local.sError)
+		F.Intrinsic.Control.End 
+	F.Intrinsic.Control.EndTry
+
+Program.Sub.LoadBin.End
+
+Program.Sub.CheckSequence.Start
+	F.Intrinsic.Control.Try
+	V.Local.sError.Declare
+
+	v.Local.sSQL.Declare
+	v.Local.sMaxSeq.Declare
+	
+	F.Intrinsic.String.Build("SELECT MAX(SEQ) FROM JOB_OPERATIONS WHERE LMO = 'L' AND SEQ < '990000' AND JOB = '{0}' AND SUFFIX = '{1}';",v.Global.sWO,v.Global.sSuffix,v.Local.sSQL)
+	
+	F.ODBC.Connection!conA.ExecuteAndReturn(v.Local.sSQL,v.Local.sMaxSeq)
+	
+	F.Intrinsic.Control.If(v.Local.sMaxSeq,<>,v.Global.sSeq)
+		F.Data.DataTable.SetValue("JOBS",V.Args.ROW,"HIDE","N")
+	F.Intrinsic.Control.EndIf
+	
+	F.Intrinsic.Control.Catch
+		F.Intrinsic.String.Build("Project: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}{1}{1}GAB Version: {5}",V.Ambient.ScriptPath,V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,V.Local.sError)
+		F.Intrinsic.UI.Msgbox(V.Local.sError)
+		F.Intrinsic.Control.End 
+	F.Intrinsic.Control.EndTry
+
+Program.Sub.CheckSequence.End
+
+
+Program.Sub.formatting.Start
+	F.Intrinsic.Control.Try
+	V.Local.sError.Declare
+	v.Local.sSql.Declare
+	v.Local.sBin.Declare
+	
+'	f.ODBC.Connection!coredb.opencompanyconnection
+'	f.ODBC.Connection!coredb.executeandreturn("select bin from v_bin_master",v.Local.sBin)
+
+'	f.Intrinsic.String.Replace(v.Local.sBin,"#$#","*!*",v.Local.sBin)
+'	
+'	f.ODBC.Connection!coredb.close
+	'f.Intrinsic.Control.CallSub(GRIDLIB_formatgrid,"TABLE","JOBS","FORM","frmMain","GRIDVIEW","gvJOBS","GRIDCONTROL","ggcJobs")
+'JOB
+gui.frmMain.ggcJobs.SetColumnProperty("gvJOBS","JOB","HeaderFontBold",True)
+gui.frmMain.ggcJobs.SetColumnProperty("gvJOBS","JOB","Visible",True)
+gui.frmMain.ggcJobs.SetColumnProperty("gvJOBS","JOB","AllowEdit",True)
+gui.frmMain.ggcJobs.SetColumnProperty("gvJOBS","JOB","ReadOnly",True)
+gui.frmMain.ggcJobs.SetColumnProperty("gvJOBS","JOB","HeaderHAlignment","Near")
+gui.frmMain.ggcJobs.SetColumnProperty("gvJOBS","JOB","CellHAlignment","Near")
+gui.frmMain.ggcJobs.SetColumnProperty("gvJOBS","JOB","Caption","JOB")
+gui.frmMain.ggcJobs.SetColumnProperty("gvJOBS","JOB","MinWidth","20")
+gui.frmMain.ggcJobs.SetColumnProperty("gvJOBS","JOB","VisibleIndex","0")
+'SUFFIX
+gui.frmMain.ggcJobs.SetColumnProperty("gvJOBS","SUFFIX","HeaderFontBold",True)
+gui.frmMain.ggcJobs.SetColumnProperty("gvJOBS","SUFFIX","Visible",True)
+gui.frmMain.ggcJobs.SetColumnProperty("gvJOBS","SUFFIX","AllowEdit",True)
+gui.frmMain.ggcJobs.SetColumnProperty("gvJOBS","SUFFIX","ReadOnly",True)
+gui.frmMain.ggcJobs.SetColumnProperty("gvJOBS","SUFFIX","HeaderHAlignment","Near")
+gui.frmMain.ggcJobs.SetColumnProperty("gvJOBS","SUFFIX","CellHAlignment","Near")
+gui.frmMain.ggcJobs.SetColumnProperty("gvJOBS","SUFFIX","Caption","SUFFIX")
+gui.frmMain.ggcJobs.SetColumnProperty("gvJOBS","SUFFIX","MinWidth","20")
+gui.frmMain.ggcJobs.SetColumnProperty("gvJOBS","SUFFIX","VisibleIndex","1")
+'SEQ
+gui.frmMain.ggcJobs.SetColumnProperty("gvJOBS","SEQ","HeaderFontBold",True)
+gui.frmMain.ggcJobs.SetColumnProperty("gvJOBS","SEQ","Visible",True)
+gui.frmMain.ggcJobs.SetColumnProperty("gvJOBS","SEQ","AllowEdit",True)
+gui.frmMain.ggcJobs.SetColumnProperty("gvJOBS","SEQ","ReadOnly",True)
+gui.frmMain.ggcJobs.SetColumnProperty("gvJOBS","SEQ","HeaderHAlignment","Near")
+gui.frmMain.ggcJobs.SetColumnProperty("gvJOBS","SEQ","CellHAlignment","Near")
+gui.frmMain.ggcJobs.SetColumnProperty("gvJOBS","SEQ","Caption","SEQ")
+gui.frmMain.ggcJobs.SetColumnProperty("gvJOBS","SEQ","MinWidth","20")
+gui.frmMain.ggcJobs.SetColumnProperty("gvJOBS","SEQ","VisibleIndex","2")
+'BIN
+gui.frmMain.ggcJobs.SetColumnProperty("gvJOBS","BIN","HeaderFontBold",True)
+gui.frmMain.ggcJobs.SetColumnProperty("gvJOBS","BIN","Visible",True)
+gui.frmMain.ggcJobs.SetColumnProperty("gvJOBS","BIN","AllowEdit",True)
+gui.frmMain.ggcJobs.SetColumnProperty("gvJOBS","BIN","ReadOnly",False)
+gui.frmMain.ggcJobs.SetColumnProperty("gvJOBS","BIN","HeaderHAlignment","Near")
+gui.frmMain.ggcJobs.SetColumnProperty("gvJOBS","BIN","CellHAlignment","Near")
+gui.frmMain.ggcJobs.SetColumnProperty("gvJOBS","BIN","Caption","REEL")
+gui.frmMain.ggcJobs.SetColumnProperty("gvJOBS","BIN","MinWidth","20")
+gui.frmMain.ggcJobs.SetColumnProperty("gvJOBS","BIN","VisibleIndex","3")
+
+'visible
+gui.frmMain.ggcJobs.SetColumnProperty("gvJOBS","PART","Visible",False)
+gui.frmMain.ggcJobs.SetColumnProperty("gvJOBS","LOC","Visible",False)
+gui.frmMain.ggcJobs.SetColumnProperty("gvJOBS","HIDE","Visible",False)
+
+'GUI.frmMain.ggcJobs.ColumnEdit("gvJOBS","BIN","DropDownList",V.Local.sBin)
+	
+	F.Intrinsic.Control.Catch
+		F.Intrinsic.String.Build("Project: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}{1}{1}GAB Version: {5}",V.Ambient.ScriptPath,V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,V.Local.sError)
+		F.Intrinsic.UI.Msgbox(V.Local.sError)
+		F.Intrinsic.Control.End 
+	F.Intrinsic.Control.EndTry
+Program.Sub.formatting.End
